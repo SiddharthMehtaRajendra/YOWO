@@ -14,9 +14,9 @@ import math
 import os
 from opts import parse_opts
 from utils import *
-from cfg import parse_cfg
+from cfg import parse_cfg, Cfg, get_args
 from region_loss import RegionLoss
-
+from YoloLoss import Yolo_loss
 from model import YOWO, get_fine_tuning_parameters
 
 # Training settings
@@ -28,7 +28,7 @@ assert dataset_use == 'ucf101-24' or dataset_use == 'jhmdb-21', 'invalid dataset
 datacfg       = opt.data_cfg
 # path for cfg file
 cfgfile       = opt.cfg_file
-
+config        = get_args(**Cfg)
 data_options  = read_data_cfg(datacfg)
 net_options   = parse_cfg(cfgfile)[0]
 
@@ -37,6 +37,7 @@ basepath      = data_options['base']
 trainlist     = data_options['train']
 testlist      = data_options['valid']
 backupdir     = data_options['backup']
+
 # number of training samples
 nsamples      = file_lines(trainlist)
 gpus          = data_options['gpus']  # e.g. 0,1,2,3
@@ -55,6 +56,7 @@ scales        = [float(scale) for scale in net_options['scales'].split(',')]
 # loss parameters
 loss_options               = parse_cfg(cfgfile)[1]
 region_loss                = RegionLoss()
+yolo_loss                  = Yolo_loss(device="cuda", batch=1, n_classes=config.classes)
 anchors                    = loss_options['anchors'].split(',')
 region_loss.anchors        = [float(i) for i in anchors]
 region_loss.num_classes    = int(loss_options['classes'])
@@ -105,8 +107,13 @@ if opt.resume_path:
     checkpoint = torch.load(opt.resume_path)
     opt.begin_epoch = checkpoint['epoch']
     best_fscore = checkpoint['fscore']
-    model.load_state_dict(checkpoint['state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
+    pretrained_dict = checkpoint['state_dict']
+    model_dict = model.state_dict()
+    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and k != 'module.cfam.conv_bn_relu1.0.weight'}
+    model_dict.update(pretrained_dict)
+    model.load_state_dict(model_dict)
+    # model.load_state_dict(checkpoint['state_dict'])
+    #optimizer.load_state_dict(checkpoint['optimizer'])
     model.seen = checkpoint['epoch'] * nsamples
     print("Loaded model fscore: ", checkpoint['fscore'])
     print("===================================================================")
@@ -135,7 +142,18 @@ def adjust_learning_rate(optimizer, batch):
         param_group['lr'] = lr/batch_size
     return lr
 
-
+def collate(batch):
+    images = []
+    bboxes = []
+    for img, box in batch:
+        images.append([img])
+        bboxes.append([box])
+    images = np.concatenate(images, axis=0)
+    images = images.transpose(0, 3, 1, 2)
+    images = torch.from_numpy(images).div(255.0)
+    bboxes = np.concatenate(bboxes, axis=0)
+    bboxes = torch.from_numpy(bboxes)
+    return images, bboxes
 
 def train(epoch):
     global processed_batches
@@ -148,6 +166,10 @@ def train(epoch):
     region_loss.l_conf.reset()
     region_loss.l_cls.reset()
     region_loss.l_total.reset()
+
+    yolo_dataset = dataset.Yolo_dataset(config.train_label, config)
+    yolo_loader = torch.utils.data.DataLoader(yolo_dataset, batch_size=batch_size, shuffle=True,
+                              num_workers=8, pin_memory=True, drop_last=True, collate_fn=collate)
 
     train_loader = torch.utils.data.DataLoader(
         dataset.listDataset(basepath, trainlist, dataset_use=dataset_use, shape=(init_width, init_height),
@@ -164,23 +186,29 @@ def train(epoch):
 
     lr = adjust_learning_rate(optimizer, processed_batches)
     logging('training at epoch %d, lr %f' % (epoch, lr))
-
+    global_step = 0
     model.train()
 
-    for batch_idx, (data, target) in enumerate(train_loader):
+    for batch_idx, (yolo_batch, (action_data, action_target)) in enumerate(zip(yolo_loader, train_loader)):
         adjust_learning_rate(optimizer, processed_batches)
         processed_batches = processed_batches + 1
-
+        images = yolo_batch[0]
+        bboxes = yolo_batch[1]
+        images = images.to(device="cuda", dtype=torch.float32)
+        bboxes = bboxes.to(device="cuda")
         if use_cuda:
-            data = data.cuda()
+            action_data = action_data.cuda()
 
-        optimizer.zero_grad()
-        output = model(data)
-        region_loss.seen = region_loss.seen + data.data.size(0)
-        loss = region_loss(output, target)
+        bboxes_pred = model(images, True)
+        #print("B", bboxes_pred.shape)
+        loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2 = yolo_loss(bboxes_pred, bboxes)
+        output = model(action_data)
+        region_loss.seen = region_loss.seen + action_data.data.size(0)
+        loss += region_loss(output, action_target)
         loss.backward()
         optimizer.step()
-
+        optimizer.zero_grad()
+        print(batch_idx, "/",  len(train_loader.dataset)//batch_size)
         # save result every 1000 batches
         if processed_batches % 500 == 0: # From time to time, reset averagemeters to see improvements
             region_loss.l_x.reset()
@@ -194,8 +222,6 @@ def train(epoch):
     t1 = time.time()
     logging('trained with %f samples/s' % (len(train_loader.dataset)/(t1-t0)))
     print('')
-
-
 
 def test(epoch):
     def truths_length(truths):
@@ -268,7 +294,6 @@ def test(epoch):
                             else:
                                 cls_id = int(box[6+2*j])
                             prob = det_conf * cls_conf
-
                             f_detect.write(str(int(box[6])+1) + ' ' + str(prob) + ' ' + str(x1) + ' ' + str(y1) + ' ' + str(x2) + ' ' + str(y2) + '\n')
                 truths = target[i].view(-1, 5)
                 num_gts = truths_length(truths)

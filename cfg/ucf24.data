@@ -1,6 +1,7 @@
-base = /usr/home/sut/datasets/ucf24
-train = /usr/home/sut/datasets/ucf24/trainlist.txt
-valid = /usr/home/sut/datasets/ucf24/testlist.txt
+base = /home/sid/self-code/yowo/datasets/ucf24/agot-data/YOWO-1/ucf24
+train = /home/sid/self-code/yowo/datasets/ucf24/agot-data/YOWO-1/ucf24/splitfiles/trainlist.txt
+valid = /home/sid/self-code/yowo/datasets/ucf24/agot-data/YOWO-1/ucf24/splitfiles/testlist.txt
 names = data/ucf24.names
 backup = backup
-gpus  = 0
+gpus  = 2,3
+
