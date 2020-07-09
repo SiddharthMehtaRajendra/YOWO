@@ -146,12 +146,6 @@ class Darknet(nn.Module):
                 pad = (kernel_size-1)//2 if is_pad else 0
                 activation = block['activation']
                 model = nn.Sequential()
-                if conv_id == 23: #Last Conv
-                    model.add_module('conv{0}'.format(99), nn.Conv2d(prev_filters, 255, kernel_size, stride, pad))
-                    prev_filters = filters
-                    out_filters.append(prev_filters)
-                    models.append(model)
-                    continue
                 if batch_normalize:
                     model.add_module('conv{0}'.format(conv_id), nn.Conv2d(prev_filters, filters, kernel_size, stride, pad, bias=False))
                     model.add_module('bn{0}'.format(conv_id), nn.BatchNorm2d(filters))
@@ -252,14 +246,13 @@ class Darknet(nn.Module):
         self.seen = self.header[3]
         buf = np.fromfile(fp, dtype = np.float32)
         fp.close()
+
         start = 0
         ind = -2
         for block in self.blocks:
             if start >= buf.size:
                 break
             ind = ind + 1
-            if ind == 30:
-                continue
             if block['type'] == 'net':
                 continue
             elif block['type'] == 'convolutional':
@@ -293,7 +286,6 @@ class Darknet(nn.Module):
                 pass
             else:
                 print('unknown type %s' % (block['type']))
-        last_layer = self.models[-1]
 
 
     def save_weights(self, outfile, cutoff=0):
