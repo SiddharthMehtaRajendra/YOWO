@@ -23,7 +23,7 @@ class YOWO(nn.Module):
         ##### 2D Backbone #####
         if opt.backbone_2d == "darknet":
             self.backbone_2d = darknet.Darknet("cfg/yolo.cfg")
-            num_ch_2d = 425 # Number of output channels for backbone_2d
+            num_ch_2d = 255 # Number of output channels for backbone_2d
         else:
             raise ValueError("Wrong backbone_2d model is requested. Please select\
                               it from [darknet]")
@@ -71,25 +71,23 @@ class YOWO(nn.Module):
         ##### Attention & Final Conv #####
         self.cfam = CFAMBlock(num_ch_2d+num_ch_3d, 1024)
         self.conv_final = nn.Conv2d(1024, 5*(opt.n_classes+4+1), kernel_size=1, bias=False)
-
         self.seen = 0
 
-
-
-    def forward(self, input):
-        x_3d = input # Input clip
-        x_2d = input[:, :, -1, :, :] # Last frame of the clip that is read
-
-        x_2d = self.backbone_2d(x_2d)
-        x_3d = self.backbone_3d(x_3d)
-        x_3d = torch.squeeze(x_3d, dim=2)
-
-        x = torch.cat((x_3d, x_2d), dim=1)
-        x = self.cfam(x)
-
-        out = self.conv_final(x)
-
-        return out
+    def forward(self, input, yolo=False):
+        if yolo:
+            x_2d = self.backbone_2d(input)
+            #print("X", x_2d.shape)
+            return x_2d
+        else:            
+            x_3d = input # Input clip
+            x_2d = input[:, :, -1, :, :] # Last frame of the clip that is read
+            x_2d = self.backbone_2d(x_2d)
+            x_3d = self.backbone_3d(x_3d)
+            x_3d = torch.squeeze(x_3d, dim=2)
+            x = torch.cat((x_3d, x_2d), dim=1) 
+            x = self.cfam(x)
+            out = self.conv_final(x)
+            return out
 
 
 def get_fine_tuning_parameters(model, opt):
