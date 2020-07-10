@@ -180,7 +180,7 @@ def train(epoch):
         loss = region_loss(output, target)
         loss.backward()
         optimizer.step()
-
+        print(str(batch_idx) + "/" + str(len(train_loader.dataset)//batch_size))
         # save result every 1000 batches
         if processed_batches % 500 == 0: # From time to time, reset averagemeters to see improvements
             region_loss.l_x.reset()

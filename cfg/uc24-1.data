@@ -1,0 +1,6 @@
+base = /home/sid/self-code/yowo/datasets/ucf24/agot-data/YOWO-1/ucf24
+train = /home/sid/self-code/yowo/datasets/ucf24/agot-data/YOWO-1/ucf24/splitfiles/trainlist.txt
+valid = /home/sid/self-code/yowo/datasets/ucf24/agot-data/YOWO-1/ucf24/splitfiles/testlist.txt
+names = data/ucf24.names
+backup = backup
+gpus  = 2,3

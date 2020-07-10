@@ -1,6 +1,6 @@
-base = /usr/home/sut/datasets/ucf24
-train = /usr/home/sut/datasets/ucf24/trainlist.txt
-valid = /usr/home/sut/datasets/ucf24/testlist.txt
-names = data/ucf24.names
+base = /home/sid/self-code/yowo/datasets/ucf24/agot-data/YOWO-1/corvus-labels/agot-labeled-data-corrected/corvus-07082020_2/
+train = /home/sid/self-code/yowo/datasets/ucf24/agot-data/YOWO-1/corvus-labels/agot-labeled-data-corrected/corvus-07082020_2/splitfiles/trainlist.txt
+valid = /home/sid/self-code/yowo/datasets/ucf24/agot-data/YOWO-1/corvus-labels/agot-labeled-data-corrected/corvus-07082020_2/splitfiles/testlist.txt
+names = /data/ucf24.names
 backup = backup
-gpus  = 0
+gpus  = 1,2
